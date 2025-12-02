@@ -9,13 +9,13 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let port = match env::args().nth(1) {
         Some(value) => value,
-        None => "5000".to_string(),
+        None => "5001".to_string(),
     };
 
     let address = format!("0.0.0.0:{}", port);
 
-    info!("Starting server on {address}");
-    server::start_server(&address)?;
+    info!("Booting chat server on {address}");
+    server::run(&address)?;
 
     Ok(())
 }

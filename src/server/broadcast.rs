@@ -1,39 +1,44 @@
-use crate::server::{BroadcastEvent, ClientInfo, ServerResult};
+use crate::server::{BroadcastMessage, ClientRecord, ServerResult};
 use chrono::Local;
 use log::error;
-use std::io::Write;
+use std::io::{self, Write};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-pub fn start_broadcast_loop(
-    clients: Arc<Mutex<Vec<ClientInfo>>>,
-    receiver: Receiver<BroadcastEvent>,
+pub fn launch_broadcast_dispatcher(
+    clients: Arc<Mutex<Vec<ClientRecord>>>,
+    receiver: Receiver<BroadcastMessage>,
 ) {
     thread::spawn(move || {
         while let Ok(event) = receiver.recv() {
-            if let Err(err) = handle_event(&clients, &event) {
-                error!("Failed to handle broadcast event: {err}");
+            if let Err(err) = handle_message(&clients, &event) {
+                error!("Broadcast dispatch failed: {err}");
             }
         }
     });
 }
 
-fn handle_event(clients: &Arc<Mutex<Vec<ClientInfo>>>, event: &BroadcastEvent) -> ServerResult<()> {
+fn handle_message(
+    clients: &Arc<Mutex<Vec<ClientRecord>>>,
+    event: &BroadcastMessage,
+) -> ServerResult<()> {
     let timestamp = Local::now().format("%H:%M:%S");
 
     let formatted = match event {
-        BroadcastEvent::User { username, content } => {
+        BroadcastMessage::Chat { username, content } => {
             format!("[{timestamp}] {username}: {content}")
         }
-        BroadcastEvent::System(content) => format!("[{timestamp}] * {content}"),
+        BroadcastMessage::Notice(content) => format!("[{timestamp}] * {content}"),
     };
 
-    send_to_all(&formatted, clients)
+    broadcast_line(&formatted, clients)
 }
 
-fn send_to_all(message: &str, clients: &Arc<Mutex<Vec<ClientInfo>>>) -> ServerResult<()> {
-    let mut guard = clients.lock()?;
+fn broadcast_line(message: &str, clients: &Arc<Mutex<Vec<ClientRecord>>>) -> ServerResult<()> {
+    let mut guard = clients.lock().map_err(|err| {
+        io::Error::new(io::ErrorKind::Other, format!("Clients lock poisoned: {err}"))
+    })?;
     let mut failed_indices = Vec::new();
 
     for (index, client) in guard.iter_mut().enumerate() {

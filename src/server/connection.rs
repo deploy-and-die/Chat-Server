@@ -1,29 +1,29 @@
-use crate::server::{BroadcastEvent, ClientInfo, ServerResult};
+use crate::server::{BroadcastMessage, ClientRecord, ServerResult};
 use log::{error, info};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-pub fn spawn_connection(
+pub fn spawn_client_handler(
     stream: TcpStream,
-    clients: Arc<Mutex<Vec<ClientInfo>>>,
-    broadcaster: Sender<BroadcastEvent>,
+    clients: Arc<Mutex<Vec<ClientRecord>>>,
+    broadcaster: Sender<BroadcastMessage>,
 ) -> ServerResult<()> {
     thread::spawn(move || {
-        if let Err(err) = handle_client(stream, clients, broadcaster) {
-            error!("Error while handling client: {err}");
+        if let Err(err) = run_client_session(stream, clients, broadcaster) {
+            error!("Client session ended in error: {err}");
         }
     });
 
     Ok(())
 }
 
-fn handle_client(
+fn run_client_session(
     mut stream: TcpStream,
-    clients: Arc<Mutex<Vec<ClientInfo>>>,
-    broadcaster: Sender<BroadcastEvent>,
+    clients: Arc<Mutex<Vec<ClientRecord>>>,
+    broadcaster: Sender<BroadcastMessage>,
 ) -> ServerResult<()> {
     let peer_addr = stream.peer_addr()?;
 
@@ -37,49 +37,42 @@ fn handle_client(
         return Ok(());
     }
 
-    let username = sanitize_username(username, peer_addr);
-
-    {
-        let mut guard = clients.lock()?;
-        guard.push(ClientInfo {
-            username: username.clone(),
-            addr: peer_addr,
-            stream: stream.try_clone()?,
-        });
-    }
+    let username = normalize_username(username, peer_addr);
+    let client_stream = stream.try_clone()?;
+    register_client(&clients, peer_addr, client_stream, &username)?;
 
     info!("{username} joined from {peer_addr}");
-    broadcaster.send(BroadcastEvent::System(format!(
+    broadcaster.send(BroadcastMessage::Notice(format!(
         "{username} joined the chat"
     )))?;
 
     loop {
-        let mut message = String::new();
-        let bytes = reader.read_line(&mut message)?;
+        let mut incoming = String::new();
+        let bytes = reader.read_line(&mut incoming)?;
 
         if bytes == 0 {
             break;
         }
 
-        let trimmed = message.trim();
+        let trimmed = incoming.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        broadcaster.send(BroadcastEvent::User {
+        broadcaster.send(BroadcastMessage::Chat {
             username: username.clone(),
             content: trimmed.to_string(),
         })?;
     }
 
-    remove_client(&clients, peer_addr)?;
+    drop_client_entry(&clients, peer_addr)?;
     info!("{username} disconnected from {peer_addr}");
-    broadcaster.send(BroadcastEvent::System(format!("{username} left the chat")))?;
+    broadcaster.send(BroadcastMessage::Notice(format!("{username} left the chat")))?;
 
     Ok(())
 }
 
-fn sanitize_username(mut raw: String, peer: SocketAddr) -> String {
+fn normalize_username(raw: String, peer: SocketAddr) -> String {
     let cleaned = raw.trim();
     if cleaned.is_empty() {
         return format!("user-{}", peer.port());
@@ -88,8 +81,29 @@ fn sanitize_username(mut raw: String, peer: SocketAddr) -> String {
     cleaned.to_string()
 }
 
-fn remove_client(clients: &Arc<Mutex<Vec<ClientInfo>>>, addr: SocketAddr) -> ServerResult<()> {
-    let mut guard = clients.lock()?;
+fn register_client(
+    clients: &Arc<Mutex<Vec<ClientRecord>>>,
+    addr: SocketAddr,
+    stream: TcpStream,
+    username: &str,
+) -> ServerResult<()> {
+    let mut guard = clients.lock().map_err(|err| {
+        io::Error::new(io::ErrorKind::Other, format!("Clients lock poisoned: {err}"))
+    })?;
+
+    guard.push(ClientRecord {
+        username: username.to_string(),
+        addr,
+        stream,
+    });
+
+    Ok(())
+}
+
+fn drop_client_entry(clients: &Arc<Mutex<Vec<ClientRecord>>>, addr: SocketAddr) -> ServerResult<()> {
+    let mut guard = clients.lock().map_err(|err| {
+        io::Error::new(io::ErrorKind::Other, format!("Clients lock poisoned: {err}"))
+    })?;
     guard.retain(|client| client.addr != addr);
     Ok(())
 }

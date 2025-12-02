@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let address = env::args()
         .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:5000".to_string());
+        .unwrap_or_else(|| "127.0.0.1:5001".to_string());
     info!("Connecting to server at {address}");
 
     let mut stream = TcpStream::connect(&address)?;

@@ -14,17 +14,17 @@ A multithreaded TCP chat server and client written in Rust. The server shares me
 ## Running the server
 
 ```bash
-cargo run -- 5000
+cargo run --bin Chat-Server -- 5001
 ```
 
-The server listens on `0.0.0.0:<PORT>`. If no port is provided it defaults to `5000`.
+The server listens on `0.0.0.0:<PORT>`. If no port is provided it defaults to `5001`.
 
 ## Running the client
 
 Open another terminal and run:
 
 ```bash
-cargo run --bin client -- 127.0.0.1:5000
+cargo run --bin client -- 127.0.0.1:5001
 ```
 
 Enter a username when prompted, then start chatting. Open multiple clients to see broadcasts.
