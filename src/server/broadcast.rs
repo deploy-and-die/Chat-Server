@@ -1,7 +1,7 @@
 use crate::server::{BroadcastEvent, ClientInfo, ServerResult};
 use chrono::Local;
 use log::error;
-use std::io::{Error, ErrorKind, Write};
+use std::io::Write;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -33,9 +33,7 @@ fn handle_event(clients: &Arc<Mutex<Vec<ClientInfo>>>, event: &BroadcastEvent) -
 }
 
 fn send_to_all(message: &str, clients: &Arc<Mutex<Vec<ClientInfo>>>) -> ServerResult<()> {
-    let mut guard = clients
-        .lock()
-        .map_err(|err| Error::new(ErrorKind::Other, format!("clients lock poisoned: {err}")))?;
+    let mut guard = clients.lock()?;
     let mut failed_indices = Vec::new();
 
     for (index, client) in guard.iter_mut().enumerate() {

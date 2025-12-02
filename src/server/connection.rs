@@ -1,6 +1,6 @@
 use crate::server::{BroadcastEvent, ClientInfo, ServerResult};
 use log::{error, info};
-use std::io::{BufRead, BufReader, Error, ErrorKind, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
@@ -40,9 +40,7 @@ fn handle_client(
     let username = sanitize_username(username, peer_addr);
 
     {
-        let mut guard = clients
-            .lock()
-            .map_err(|err| Error::new(ErrorKind::Other, format!("clients lock poisoned: {err}")))?;
+        let mut guard = clients.lock()?;
         guard.push(ClientInfo {
             username: username.clone(),
             addr: peer_addr,
@@ -81,7 +79,7 @@ fn handle_client(
     Ok(())
 }
 
-fn sanitize_username(raw: String, peer: SocketAddr) -> String {
+fn sanitize_username(mut raw: String, peer: SocketAddr) -> String {
     let cleaned = raw.trim();
     if cleaned.is_empty() {
         return format!("user-{}", peer.port());
@@ -91,9 +89,7 @@ fn sanitize_username(raw: String, peer: SocketAddr) -> String {
 }
 
 fn remove_client(clients: &Arc<Mutex<Vec<ClientInfo>>>, addr: SocketAddr) -> ServerResult<()> {
-    let mut guard = clients
-        .lock()
-        .map_err(|err| Error::new(ErrorKind::Other, format!("clients lock poisoned: {err}")))?;
+    let mut guard = clients.lock()?;
     guard.retain(|client| client.addr != addr);
     Ok(())
 }
