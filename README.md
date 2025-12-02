@@ -29,9 +29,3 @@ cargo run --bin client -- 127.0.0.1:5001
 
 Enter a username when prompted, then start chatting. Open multiple clients to see broadcasts.
 
-## How it works
-
-- `src/server/connection.rs` spawns a thread for each client, reads incoming lines, and sends them through an mpsc channel.
-- `src/server/broadcast.rs` listens on the channel, formats messages with timestamps, and sends them to every connected stream, removing dead connections safely.
-- Shared client streams are stored in `Arc<Mutex<Vec<ClientInfo>>>` so each thread can access the current peer list without data races.
-- Logging uses `log` with `env_logger`, so set `RUST_LOG=info` for verbose output.
